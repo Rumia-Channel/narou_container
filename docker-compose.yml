@@ -10,7 +10,7 @@ services:
       - NET_ADMIN
       - SYS_MODULE
     extra_hosts:
-      - "narourb:172.18.0.15"
+      - "narourb:172.19.0.15"
       - "host.docker.internal:host-gateway"
     ports:
       - "443:443"
@@ -77,4 +77,4 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.18.0.0/16
+        - subnet: 172.19.0.0/16
