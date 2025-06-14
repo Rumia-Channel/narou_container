@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -euo pipefail
 trap 'echo "[ERROR] 行:$LINENO で失敗"; exit 1' ERR
 
@@ -125,8 +125,8 @@ periodic_sync() {
 
   if rclone bisync "${LOCAL}" "${REMOTE}" \
     --config /config/rclone.conf \
-    --backup-dir1 "${BACKUP_ROOT_LOCAL}/${TODAY}" \
-    --backup-dir2 "${BACKUP_ROOT_REMOTE}/${TODAY}" \
+    --backup-dir1 "${BACKUP_ROOT_LOCAL}/${today}" \
+    --backup-dir2 "${BACKUP_ROOT_REMOTE}/${today}" \
     --checksum ${BISYNC_OPT} --verbose; then
     touch "${LOCAL}/.bisync_initialized"
   else

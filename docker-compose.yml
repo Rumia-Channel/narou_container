@@ -5,15 +5,12 @@ services:
   nginx:
     build: ./nginx
     container_name: nginx
-    # host モードを維持
     network_mode: host
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
-      # nginx コンテナから app:8000 を 127.18.0.18 経由で叩けるようにホスト名を定義
     extra_hosts:
-      - "app:172.18.0.10"
-      # Docker 20.10 以降で使える場合はこちらでも可
+      - "narourb:172.18.0.15"
       - "host.docker.internal:host-gateway"
     ports:
       - "443:443"
@@ -22,45 +19,40 @@ services:
       TAILNET_NAME: ${TAILNET_NAME}
       TS_AUTHKEY: ${TS_AUTHKEY}
       TS_HOSTNAME: ${TS_HOSTNAME}
-      TZ: ${TZ}               # ← 追加
+      TZ: ${TZ}
     volumes:
       - /dev/net/tun:/dev/net/tun
       - nginx-tailscale:/var/lib/tailscale
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/ssl:/etc/nginx/ssl
-      - shared-data:/usr/share/nginx/html:ro
-      - /etc/localtime:/etc/localtime:ro    # ← 追加
-      - /etc/timezone:/etc/timezone:ro      # ← 追加
+      - webnovel:/usr/share/nginx/html:ro    # ← 変更
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
 
-  app:
-    build: ./app
-    container_name: app
+  narourb:
+    build: ./narourb
+    container_name: narourb
+    stdin_open: false   # TTY不要ならオフのままでOK
+    tty: false
     ports:
-      - "8000:8000"
+      - "3641:3641"  # HTTP
+      - "3642:3642"  # WebSocket
     networks:
       backend:
-        ipv4_address: 172.18.0.10
+        ipv4_address: 172.18.0.15
     environment:
-      GIT_REPO:    ${GIT_REPO}
-      GIT_BRANCH:  ${GIT_BRANCH}
-      AUTO_CLONE:  "true"
-      COOKIE_PATH: ${COOKIE_PATH}
-      TZ: ${TZ}                      # ← 追加
+      TZ: ${TZ}
     volumes:
-      - ./files:/app/files:ro
-      - app-code:/app/code
-      - app-queue:/app/queue
-      - app-config:/app/config
-      - app-extensions:/app/extensions
-      - shared-data:/share/data
-      - /etc/localtime:/etc/localtime:ro    # ← 追加
-      - /etc/timezone:/etc/timezone:ro      # ← 追加
+      - ./files/webnovel:/files/webnovel:ro
+      - webnovel:/share/data             # ← 変更
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
 
   rclone-backup:
     build: ./rclone
     container_name: rclone-backup
     depends_on:
-      - app
+      - narourb
     networks:
       - backend
     environment:
@@ -70,20 +62,16 @@ services:
       WEBDAV_PASS:        ${WEBDAV_PASS}
       WEBDAV_VENDOR:      ${WEBDAV_VENDOR}
       WEBDAV_REMOTE_NAME: ${WEBDAV_REMOTE_NAME}
-      TZ: ${TZ}                       # ← 追加
+      TZ: ${TZ}
     volumes:
-      - shared-data:/share/data
+      - webnovel:/share/data               # ← 変更
       - rclone-config:/config
-      - /etc/localtime:/etc/localtime:ro    # ← 追加
-      - /etc/timezone:/etc/timezone:ro      # ← 追加
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
 
 volumes:
   nginx-tailscale:
-  app-code:
-  app-config:
-  app-queue:
-  app-extensions:
-  shared-data:
+  webnovel:       # ← ここを追加（旧 shared-data を webnovel に）
   rclone-config:
 
 networks:
