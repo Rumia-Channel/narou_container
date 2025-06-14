@@ -4,7 +4,7 @@ FROM ruby:slim-bookworm
 # 必要最低限のパッケージ（git やビルドに必要なツールなど）
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      bash curl expect git build-essential ca-certificates && \
+      bash curl expect git build-essential ca-certificates jq unzip && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # specific_install と Bundler をインストール

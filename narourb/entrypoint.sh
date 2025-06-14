@@ -16,12 +16,22 @@ while ! ls /share/data/.ready &>/dev/null; do
 done
 echo "[Narou rb] .ready ファイルを検出しました。Narou rb を起動します。"
 
+# AozoraEpub3 を /share/data/AozoraEpub3 にダウンロード＆解凍
+DIR=/share/data/AozoraEpub3
+u=$(curl -s https://api.github.com/repos/kyukyunyorituryo/AozoraEpub3/releases/latest \
+    | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
+mkdir -p "$DIR"
+curl -L "$u" -o "$DIR/$(basename "$u")"
+unzip -q -d "$DIR" "$DIR/$(basename "$u")"
+rm "$DIR/$(basename "$u")"
+
 # 作業ディレクトリを /share/data に移動
 cd /share/data
 
-# 初回のみ narou init を自動実行（AozoraEpub3 設定をスキップ）
+# 初回のみ
 if [ ! -d .narousetting ]; then
-  echo | narou init
+  # -p に AozoraEpub3 フォルダ、-l に行の高さ（em）を指定
+  narou init -p /share/data/AozoraEpub3 -l 1.8
 fi
 
 # ── ここで「already-server-boot」を true にしておく ──
