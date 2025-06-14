@@ -4,13 +4,13 @@ services:
 
   nginx:
     build: ./nginx
-    container_name: nginx
+    container_name: narou_rb_nginx
     network_mode: host
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
     extra_hosts:
-      - "narourb:172.19.0.15"
+      - "narou_rb:172.19.0.15"
       - "host.docker.internal:host-gateway"
     ports:
       - "443:443"
@@ -29,15 +29,15 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
 
-  narourb:
-    build: ./narourb
-    container_name: narourb
+  narou_rb:
+    build: ./narou_rb
+    container_name: narou_rb
     stdin_open: false   # TTY不要ならオフのままでOK
     tty: false
     depends_on:
      - nginx
     # ↓ ここだけを変更
-    network_mode: "container:nginx"
+    network_mode: "container:narou_rb_nginx"
     environment:
       TZ: ${TZ}
     volumes:
@@ -48,9 +48,9 @@ services:
 
   rclone-backup:
     build: ./rclone
-    container_name: rclone-backup
+    container_name: narou_rb_rclone-backup
     depends_on:
-      - narourb
+      - narou_rb
     networks:
       - backend
     environment:
