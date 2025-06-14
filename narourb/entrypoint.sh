@@ -43,4 +43,4 @@ inv.save"
 # EPUB 作成を無効化（設定として永続化）
 narou setting convert.no-epub=true
 
-narou web -p 3641 --no-browser
+narou web -p 3641 --host 0.0.0.0 --no-browser

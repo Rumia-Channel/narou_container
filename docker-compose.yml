@@ -34,12 +34,10 @@ services:
     container_name: narourb
     stdin_open: false   # TTY不要ならオフのままでOK
     tty: false
-    ports:
-      - "3641:3641"  # HTTP
-      - "3642:3642"  # WebSocket
-    networks:
-      backend:
-        ipv4_address: 172.18.0.15
+    depends_on:
+     - nginx
+    # ↓ ここだけを変更
+    network_mode: "container:nginx"
     environment:
       TZ: ${TZ}
     volumes:
