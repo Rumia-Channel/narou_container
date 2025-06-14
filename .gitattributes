@@ -1,0 +1,5 @@
+# 全テキストファイルを LF でチェックアウト
+* text=auto eol=lf
+
+# シェルスクリプトは明示的に LF 固定
+*.sh text eol=lf
