@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-# /files/webnovel があれば /share/data/webnovel に丸ごとコピー
-if [ -d /files/webnovel ]; then
-  mkdir -p /share/data/webnovel
-  cp -rf /files/webnovel/. /share/data/webnovel
-fi
-
 # narou のインストール
 gem specific_install -b docker https://github.com/Rumia-Channel/narou.git
 
@@ -22,11 +16,17 @@ u=$(curl -s https://api.github.com/repos/kyukyunyorituryo/AozoraEpub3/releases/l
     | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
 mkdir -p "$DIR"
 curl -L "$u" -o "$DIR/$(basename "$u")"
-unzip -q -d "$DIR" "$DIR/$(basename "$u")"
+unzip -q -o -d "$DIR" "$DIR/$(basename "$u")"
 rm "$DIR/$(basename "$u")"
 
 # 作業ディレクトリを /share/data に移動
 cd /share/data
+
+# /files/webnovel があれば /share/data/webnovel に丸ごとコピー
+if [ -d /files/webnovel ]; then
+  mkdir -p /share/data/webnovel
+  cp -rf /files/webnovel/. /share/data/webnovel
+fi
 
 # 初回のみ
 if [ ! -d .narousetting ]; then
@@ -43,4 +43,6 @@ inv.save"
 # EPUB 作成を無効化（設定として永続化）
 narou setting convert.no-epub=true
 
-narou web -p 3641 --host 0.0.0.0 --no-browser
+narou setting server-bind=0.0.0.0
+
+narou web -p 3641 --no-browser

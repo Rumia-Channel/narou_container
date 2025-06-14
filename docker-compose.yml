@@ -41,8 +41,8 @@ services:
     environment:
       TZ: ${TZ}
     volumes:
-      - ./files/webnovel:/files/webnovel:ro
       - webnovel:/share/data             # ← 変更
+      - ./files/webnovel:/files/webnovel:ro
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
 
