@@ -1,0 +1,94 @@
+version: '3.9'
+
+services:
+
+  nginx:
+    build: ./nginx
+    container_name: nginx
+    # host モードを維持
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+      # nginx コンテナから app:8000 を 127.18.0.18 経由で叩けるようにホスト名を定義
+    extra_hosts:
+      - "app:172.18.0.10"
+      # Docker 20.10 以降で使える場合はこちらでも可
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "443:443"
+    environment:
+      TS_ADMIN_KEY: ${TS_ADMIN_KEY}
+      TAILNET_NAME: ${TAILNET_NAME}
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_HOSTNAME: ${TS_HOSTNAME}
+      TZ: ${TZ}               # ← 追加
+    volumes:
+      - /dev/net/tun:/dev/net/tun
+      - nginx-tailscale:/var/lib/tailscale
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl
+      - shared-data:/usr/share/nginx/html:ro
+      - /etc/localtime:/etc/localtime:ro    # ← 追加
+      - /etc/timezone:/etc/timezone:ro      # ← 追加
+
+  app:
+    build: ./app
+    container_name: app
+    ports:
+      - "8000:8000"
+    networks:
+      backend:
+        ipv4_address: 172.18.0.10
+    environment:
+      GIT_REPO:    ${GIT_REPO}
+      GIT_BRANCH:  ${GIT_BRANCH}
+      AUTO_CLONE:  "true"
+      COOKIE_PATH: ${COOKIE_PATH}
+      TZ: ${TZ}                      # ← 追加
+    volumes:
+      - ./files:/app/files:ro
+      - app-code:/app/code
+      - app-queue:/app/queue
+      - app-config:/app/config
+      - app-extensions:/app/extensions
+      - shared-data:/share/data
+      - /etc/localtime:/etc/localtime:ro    # ← 追加
+      - /etc/timezone:/etc/timezone:ro      # ← 追加
+
+  rclone-backup:
+    build: ./rclone
+    container_name: rclone-backup
+    depends_on:
+      - app
+    networks:
+      - backend
+    environment:
+      WEBDAV_URL:         ${WEBDAV_URL}
+      WEBDAV_PATH:        ${WEBDAV_PATH}
+      WEBDAV_USER:        ${WEBDAV_USER}
+      WEBDAV_PASS:        ${WEBDAV_PASS}
+      WEBDAV_VENDOR:      ${WEBDAV_VENDOR}
+      WEBDAV_REMOTE_NAME: ${WEBDAV_REMOTE_NAME}
+      TZ: ${TZ}                       # ← 追加
+    volumes:
+      - shared-data:/share/data
+      - rclone-config:/config
+      - /etc/localtime:/etc/localtime:ro    # ← 追加
+      - /etc/timezone:/etc/timezone:ro      # ← 追加
+
+volumes:
+  nginx-tailscale:
+  app-code:
+  app-config:
+  app-queue:
+  app-extensions:
+  shared-data:
+  rclone-config:
+
+networks:
+  backend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
