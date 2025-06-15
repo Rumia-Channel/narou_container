@@ -1,26 +1,28 @@
 #!/bin/bash
 set -euo pipefail
 
-CERT="/etc/nginx/ssl/tls.crt"
-KEY="/etc/nginx/ssl/tls.key"
-TIMEOUT=360        # 秒。長さはお好みで
+#CERT="/etc/nginx/ssl/tls.crt"
+#KEY="/etc/nginx/ssl/tls.key"
+#TIMEOUT=360        # 秒。長さはお好みで
 
-echo "[nginx] 証明書が揃うまで待機します..."
+#echo "[nginx] 証明書が揃うまで待機します..."
 
-elapsed=0
-while [[ (! -s "$CERT" || ! -s "$KEY") && $elapsed -lt $TIMEOUT ]]; do
-  sleep 1
-  elapsed=$((elapsed + 1))
-done
+#elapsed=0
+#while [[ (! -s "$CERT" || ! -s "$KEY") && $elapsed -lt $TIMEOUT ]]; do
+#  sleep 1
+#  elapsed=$((elapsed + 1))
+#done
 
-if [[ ! -s "$CERT" || ! -s "$KEY" ]]; then
-  echo "[nginx] ${TIMEOUT}s 以内に証明書が揃いませんでした。"
-  echo "[nginx] 一時的な自己署名証明書を生成して起動します。"
-  openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
-    -subj "/CN=localhost" \
-    -keyout "$KEY" -out "$CERT"
-else
-  echo "[nginx] 証明書が揃いました。nginx を起動します。"
-fi
+#if [[ ! -s "$CERT" || ! -s "$KEY" ]]; then
+#  echo "[nginx] ${TIMEOUT}s 以内に証明書が揃いませんでした。"
+#  echo "[nginx] 一時的な自己署名証明書を生成して起動します。"
+#  openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+#    -subj "/CN=localhost" \
+#    -keyout "$KEY" -out "$CERT"
+#else
+#  echo "[nginx] 証明書が揃いました。nginx を起動します。"
+#fi
+
+echo "[nginx] HTTP モードで起動します（SSL 証明書の待機は行いません）"
 
 exec nginx -g 'daemon off;'

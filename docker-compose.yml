@@ -19,7 +19,7 @@ services:
   nginx:
     build: ./nginx
     container_name: narou_rb_nginx
-    network_mode: "container:narou_rb_tailscale"
+    network_mode: "service:narou_rb_tailscale"
     depends_on:
       - narou_rb_tailscale
     volumes:
@@ -32,7 +32,7 @@ services:
   narou_rb:
     build: ./narou_rb
     container_name: narou_rb
-    network_mode: "container:narou_rb_tailscale"
+    network_mode: "service:narou_rb_tailscale"
     depends_on:
       - narou_rb_tailscale
     environment:

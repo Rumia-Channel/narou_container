@@ -6,15 +6,13 @@ set -euo pipefail
 : "${TS_HOSTNAME:?TS_HOSTNAME が未設定です}"
 : "${TS_AUTHKEY:?TS_AUTHKEY が未設定です}"
 
+# ホスト名と完全修飾ドメイン名
 NODE="${TS_HOSTNAME%%.*}"
 FQDN="${TS_HOSTNAME}"
-CERT_DIR="/var/lib/tailscale/certs"
-CRT="/var/lib/tailscale/tls.crt"
-KEY="/var/lib/tailscale/tls.key"
 
 log(){ echo "[$(date +%H:%M:%S)] $*"; }
 
-# 既存デバイス削除
+# ─── 既存デバイスの重複登録を削除 ───────────────────────
 log "purge duplicates of ${FQDN}"
 curl -s -u "${TS_ADMIN_KEY}:" \
   "https://api.tailscale.com/api/v2/tailnet/${TAILNET_NAME}/devices" |
@@ -24,27 +22,33 @@ curl -s -u "${TS_ADMIN_KEY}:" \
       "https://api.tailscale.com/api/v2/device/${id}" && log "  deleted ${id}"
   done
 
-# tailscaled 起動
+# ─── tailscaled をバックグラウンドで起動 ─────────────────────
 log "start tailscaled"
 tailscaled --state=/var/lib/tailscale/tailscaled.state &
-for i in {1..20}; do tailscale status &>/dev/null && break; sleep 1; done
+TS_PID=$!
 
-# tailscale up
-log "tailscale up (${NODE})"
-tailscale up --reset --authkey="${TS_AUTHKEY}" --hostname="${NODE}" || log "[warn] up failed"
-
-# 証明書バックグラウンド取得
-(
-  log "tailscale cert background fetch"
-  mkdir -p "$CERT_DIR"
-  if tailscale cert \
-        --cert-file "${CRT}" \
-        --key-file  "${KEY}" \
-        "${FQDN}"; then
-    log "cert fetched and written to /var/lib/tailscale"
-  else
-    log "[warn] cert fetch failed"
+# tailscaled が起動完了するまで待機
+for i in {1..20}; do
+  if tailscale status &>/dev/null; then
+    break
   fi
-) &
+  sleep 1
+done
 
-wait
+# ─── tailnet にログイン＆接続 ─────────────────────────────
+log "tailscale up (${NODE})"
+tailscale up --reset --authkey="${TS_AUTHKEY}" --hostname="${NODE}" \
+  || log "[warn] tailscale up failed"
+
+# ─── HTTP（80）と HTTPS（443）を同時に公開 ──────────────────
+log "tailscale serve --bg --http=80 http://127.0.0.1:80"
+tailscale serve --bg --http=80 http://127.0.0.1:80 \
+  || log "[warn] serve HTTP failed"
+
+log "tailscale serve --bg --https=443 http://127.0.0.1:80"
+tailscale serve --bg --https=443 http://127.0.0.1:80 \
+  || log "[warn] serve HTTPS failed"
+
+
+# ─── tailscaled プロセスを維持 ────────────────────────────
+wait $TS_PID
