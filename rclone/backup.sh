@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 set -euo pipefail
 trap 'echo "[ERROR] 行:$LINENO で失敗"; exit 1' ERR
 
@@ -13,7 +13,7 @@ trap 'echo "[ERROR] 行:$LINENO で失敗"; exit 1' ERR
 WEBDAV_REMOTE_NAME=${WEBDAV_REMOTE_NAME:-mywebdav}
 
 # --------------------------------------------------
-# rclone.conf
+# rclone.conf 作成
 # --------------------------------------------------
 ENC_PASS="$(rclone obscure "${WEBDAV_PASS}")"
 mkdir -p /config
@@ -34,22 +34,41 @@ REMOTE="${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}"
 BACKUP_ROOT_LOCAL="/share/_archive/data"
 BACKUP_ROOT_REMOTE="${WEBDAV_REMOTE_NAME}:archive${WEBDAV_PATH}"
 READY_FILE="${LOCAL}/.ready"
-
-# bisync の作業フォルダ（named volume 経由で永続化）
+bisync_flag_file="${LOCAL}/.bisync_initialized"
 BISYNC_WORKDIR="/config/bisync_work"
-mkdir -p "${BISYNC_WORKDIR}"
+
+# --------------------------------------------------
+# マーカーリセット
+# --------------------------------------------------
+prepare_initial() {
+  mkdir -p "${LOCAL}"
+  # ローカルが空なら stale マーカーを削除
+  if [ ! "$(ls -A "${LOCAL}")" ]; then
+    for f in ".ready" ".bisync_initialized"; do
+      if [ -f "${LOCAL}/${f}" ]; then
+        echo "[cleanup] stale ${f} を削除"
+        rm -f "${LOCAL}/${f}"
+      fi
+    done
+  fi
+}
 
 # --------------------------------------------------
 # サイズ比較＆復元
 # --------------------------------------------------
 check_and_restore_if_needed() {
   sub=$1
-  remote_size=$(rclone size "${REMOTE}/${sub}" --json --config /config/rclone.conf | jq '.bytes')
-  local_size=$( rclone size  "${LOCAL}/${sub}" --json --config /config/rclone.conf | jq '.bytes')
+  remote_size=$(rclone size "${REMOTE}/${sub}" \
+                  --config /config/rclone.conf --json \
+                | jq '.bytes')
+  local_size=$( rclone size  "${LOCAL}/${sub}" \
+                  --config /config/rclone.conf --json \
+                | jq '.bytes')
   if [ "${remote_size}" -gt "${local_size}" ]; then
     echo "[restore] ${sub} ${local_size}→${remote_size}B"
     rclone copy "${REMOTE}/${sub}" "${LOCAL}/${sub}" \
-      --config /config/rclone.conf --progress
+      --config /config/rclone.conf --progress \
+      --exclude ".ready" --exclude ".bisync_initialized"
   fi
 }
 
@@ -57,11 +76,15 @@ check_and_restore_if_needed() {
 # 初回同期
 # --------------------------------------------------
 initial_sync() {
-  [ -f "${READY_FILE}" ] && { echo "[rclone] 初回セットアップ済み"; return; }
+  if [ -f "${READY_FILE}" ]; then
+    echo "[rclone] 初回セットアップ済み"
+    return
+  fi
 
-  echo "[rclone] 初回フルコピー"
+  echo "[rclone] 初回フルコピー ('.ready' '.bisync_initialized' を除外)"
   rclone sync "${REMOTE}" "${LOCAL}" \
-    --config /config/rclone.conf --progress
+    --config /config/rclone.conf --progress \
+    --exclude ".ready" --exclude ".bisync_initialized"
 
   for path in "${LOCAL}"/*; do
     [ -d "${path}" ] && check_and_restore_if_needed "${path##*/}"
@@ -71,25 +94,20 @@ initial_sync() {
   echo "[rclone] 初回完了 (.ready 作成)"
 }
 
-# =====================================
-# バックアップ世代整理 (BusyBox 対応)
-#   ・find の -printf を使わずシンプルな for ループ
-#   ・削除基準は "7 days ago" を busybox date -d で計算
+# --------------------------------------------------
+# バックアップ世代整理
+# --------------------------------------------------
 prune_backups() {
-  target_root="$1"   # ex: ${BACKUP_ROOT_REMOTE}
-  mode="$2"          # "remote" or "local"
+  target_root="$1"
+  mode="$2"
 
-  echo "[prune][${mode}] ${target_root} : 7日より前の世代をディレクトリ単位で削除"
+  echo "[prune][${mode}] ${target_root} : 7日より前の世代を削除"
 
   if [ "${mode}" = "remote" ]; then
-    # ── 日付閾値を計算 ──
     NOW=$(date +%s)
     CUTOFF=$(( NOW - 7*24*3600 ))
-    # BusyBox でも動くように -d "@…" or -r fallback
     THRESHOLD=$(date -u -d "@${CUTOFF}" +%Y-%m-%d 2>/dev/null \
                 || date -u -r "${CUTOFF}" +%Y-%m-%d)
-
-    # ── サブディレクトリを列挙して、名前で比較 ──
     for sub in $(rclone lsd "${target_root}" \
                    --config /config/rclone.conf 2>/dev/null \
                  | awk '{print $5}'); do
@@ -99,7 +117,6 @@ prune_backups() {
         --config /config/rclone.conf --verbose || true
     done
   else
-    # ローカル側
     find "${target_root}" -mindepth 1 -maxdepth 1 \
       -type d -mtime +7 \
       -print -exec rm -rf {} \; || true
@@ -110,38 +127,41 @@ prune_backups() {
 # 定期 bisync
 # --------------------------------------------------
 periodic_sync() {
+  local today
   today=$(date +%F)
   echo "[rclone] bisync start (backup ${today})"
 
+  mkdir -p "${BISYNC_WORKDIR}"
   bisync_opts="--workdir ${BISYNC_WORKDIR} --size-only --compare size"
 
-  # ① 初回フラグが無ければ --resync
-  if [ ! -f "${LOCAL}/.bisync_initialized" ]; then
+  if [ ! -f "${bisync_flag_file}" ]; then
     BISYNC_OPT="--resync"
-    echo "  --resync (初回 or 前回エラー復旧)"
+    echo "  --resync (初回 or 復旧)"
   else
     BISYNC_OPT=""
   fi
 
   if rclone bisync "${LOCAL}" "${REMOTE}" \
-    --config /config/rclone.conf \
-    --backup-dir1 "${BACKUP_ROOT_LOCAL}/${today}" \
-    --backup-dir2 "${BACKUP_ROOT_REMOTE}/${today}" \
-    --checksum ${BISYNC_OPT} --verbose; then
-    touch "${LOCAL}/.bisync_initialized"
+      --config /config/rclone.conf \
+      --backup-dir1 "${BACKUP_ROOT_LOCAL}/${today}" \
+      --backup-dir2 "${BACKUP_ROOT_REMOTE}/${today}" \
+      --checksum ${BISYNC_OPT} --verbose \
+      --exclude ".ready" --exclude ".bisync_initialized"; then
+    touch "${bisync_flag_file}"
   else
-    echo "[rclone] bisync に失敗したため .bisync_initialized をリセット"
-    rm -f "${LOCAL}/.bisync_initialized"
+    echo "[rclone] bisync に失敗、フラグをリセット"
+    rm -f "${bisync_flag_file}"
   fi
 
   prune_backups "${BACKUP_ROOT_REMOTE}" "remote"
-  prune_backups "${BACKUP_ROOT_LOCAL}" "local"
+  prune_backups "${BACKUP_ROOT_LOCAL}"  "local"
 }
 
 # --------------------------------------------------
 # メイン
 # --------------------------------------------------
 main() {
+  prepare_initial
   mkdir -p "${LOCAL}" "${BACKUP_ROOT_LOCAL}"
   initial_sync
   while :; do
