@@ -1,47 +1,44 @@
-version: '3.9'
-
 services:
+
+  narou_rb_tailscale:
+    build: ./tailscale
+    container_name: narou_rb_tailscale
+    command: ["/entrypoint.sh"]
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    volumes:
+      - /dev/net/tun:/dev/net/tun
+      - narou_rb-tailscale:/var/lib/tailscale
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_ADMIN_KEY: ${TS_ADMIN_KEY}
+      TAILNET_NAME: ${TAILNET_NAME}
+      TS_HOSTNAME: ${TS_HOSTNAME}
 
   nginx:
     build: ./nginx
     container_name: narou_rb_nginx
-    network_mode: host
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    extra_hosts:
-      - "narou_rb:172.19.0.15"
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "443:443"
-    environment:
-      TS_ADMIN_KEY: ${TS_ADMIN_KEY}
-      TAILNET_NAME: ${TAILNET_NAME}
-      TS_AUTHKEY: ${TS_AUTHKEY}
-      TS_HOSTNAME: ${TS_HOSTNAME}
-      TZ: ${TZ}
+    network_mode: "container:narou_rb_tailscale"
+    depends_on:
+      - narou_rb_tailscale
     volumes:
-      - /dev/net/tun:/dev/net/tun
-      - nginx-tailscale:/var/lib/tailscale
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/ssl:/etc/nginx/ssl
-      - webnovel:/usr/share/nginx/html:ro    # ← 変更
+      - webnovel:/usr/share/nginx/html:ro
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
 
   narou_rb:
     build: ./narou_rb
     container_name: narou_rb
-    stdin_open: false   # TTY不要ならオフのままでOK
-    tty: false
+    network_mode: "container:narou_rb_tailscale"
     depends_on:
-     - nginx
-    # ↓ ここだけを変更
-    network_mode: "container:narou_rb_nginx"
+      - narou_rb_tailscale
     environment:
       TZ: ${TZ}
     volumes:
-      - webnovel:/share/data             # ← 変更
+      - webnovel:/share/data
       - ./files/webnovel:/files/webnovel:ro
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
@@ -62,14 +59,14 @@ services:
       WEBDAV_REMOTE_NAME: ${WEBDAV_REMOTE_NAME}
       TZ: ${TZ}
     volumes:
-      - webnovel:/share/data               # ← 変更
+      - webnovel:/share/data
       - rclone-config:/config
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
 
 volumes:
-  nginx-tailscale:
-  webnovel:       # ← ここを追加（旧 shared-data を webnovel に）
+  narou_rb-tailscale:
+  webnovel:
   rclone-config:
 
 networks:
