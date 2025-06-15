@@ -3,7 +3,7 @@ set -euo pipefail
 
 CERT="/etc/nginx/ssl/tls.crt"
 KEY="/etc/nginx/ssl/tls.key"
-TIMEOUT=120        # 秒。長さはお好みで
+TIMEOUT=360        # 秒。長さはお好みで
 
 echo "[nginx] 証明書が揃うまで待機します..."
 
