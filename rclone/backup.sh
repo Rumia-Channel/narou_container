@@ -27,6 +27,11 @@ pass   = ${ENC_PASS}
 EOF
 
 # --------------------------------------------------
+# rclone に与える共通エンコードオプション
+# --------------------------------------------------
+RC_ENC="--local-encoding Raw --webdav-encoding Percent"
+
+# --------------------------------------------------
 # パス定義
 # --------------------------------------------------
 LOCAL="/share/data"
@@ -59,16 +64,16 @@ prepare_initial() {
 check_and_restore_if_needed() {
   sub=$1
   remote_size=$(rclone size "${REMOTE}/${sub}" \
-                  --config /config/rclone.conf --json \
+                  --config /config/rclone.conf --json ${RC_ENC} \
                 | jq '.bytes')
-  local_size=$( rclone size  "${LOCAL}/${sub}" \
-                  --config /config/rclone.conf --json \
+  local_size=$(rclone size  "${LOCAL}/${sub}" \
+                  --config /config/rclone.conf --json ${RC_ENC} \
                 | jq '.bytes')
   if [ "${remote_size}" -gt "${local_size}" ]; then
     echo "[restore] ${sub} ${local_size}→${remote_size}B"
     rclone copy "${REMOTE}/${sub}" "${LOCAL}/${sub}" \
       --config /config/rclone.conf --progress \
-      --exclude ".ready" --exclude ".bisync_initialized"
+      --exclude ".ready" --exclude ".bisync_initialized" ${RC_ENC}
   fi
 }
 
@@ -84,7 +89,7 @@ initial_sync() {
   echo "[rclone] 初回フルコピー ('.ready' '.bisync_initialized' を除外)"
   rclone sync "${REMOTE}" "${LOCAL}" \
     --config /config/rclone.conf --progress \
-    --exclude ".ready" --exclude ".bisync_initialized"
+    --exclude ".ready" --exclude ".bisync_initialized" ${RC_ENC}
 
   for path in "${LOCAL}"/*; do
     [ -d "${path}" ] && check_and_restore_if_needed "${path##*/}"
@@ -109,17 +114,17 @@ prune_backups() {
     THRESHOLD=$(date -u -d "@${CUTOFF}" +%Y-%m-%d 2>/dev/null \
                 || date -u -r "${CUTOFF}" +%Y-%m-%d)
     for sub in $(rclone lsd "${target_root}" \
-                   --config /config/rclone.conf 2>/dev/null \
+                   --config /config/rclone.conf ${RC_ENC} 2>/dev/null \
                  | awk '{print $5}'); do
       [ "${sub}" \< "${THRESHOLD}" ] || continue
       echo "[prune][remote] purge ${sub}"
       rclone purge "${target_root}/${sub}" \
-        --config /config/rclone.conf --verbose || true
+        --config /config/rclone.conf --verbose ${RC_ENC} || true
     done
   else
     find "${target_root}" -mindepth 1 -maxdepth 1 \
       -type d -mtime +7 \
-      -print -exec rm -rf {} \; || true
+      -print -exec rm -rf {} \\; || true
   fi
 }
 
@@ -146,7 +151,7 @@ periodic_sync() {
       --backup-dir1 "${BACKUP_ROOT_LOCAL}/${today}" \
       --backup-dir2 "${BACKUP_ROOT_REMOTE}/${today}" \
       --checksum ${BISYNC_OPT} --verbose \
-      --exclude ".ready" --exclude ".bisync_initialized"; then
+      --exclude ".ready" --exclude ".bisync_initialized" ${RC_ENC}; then
     touch "${bisync_flag_file}"
   else
     echo "[rclone] bisync に失敗、フラグをリセット"
