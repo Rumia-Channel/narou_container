@@ -45,4 +45,6 @@ narou setting convert.no-epub=true
 
 narou setting server-bind=0.0.0.0
 
+narou setting convert.copy-to=/share/epub
+
 narou web -p 3641 --no-browser

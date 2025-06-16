@@ -5,6 +5,10 @@ FROM ruby:slim-bookworm
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       bash curl expect git build-essential ca-certificates jq unzip && \
+    curl -fsSL https://download.oracle.com/java/21/latest/jdk-21_linux-x64_bin.deb -o /tmp/jdk-21.deb && \
+    dpkg -i /tmp/jdk-21.deb || true && \
+    apt-get -f install -y --no-install-recommends && \
+    rm -f /tmp/jdk-21.deb && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # specific_install と Bundler をインストール

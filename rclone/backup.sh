@@ -129,6 +129,15 @@ prune_backups() {
 }
 
 # --------------------------------------------------
+# EPUB 一方向アップロード
+# --------------------------------------------------
+epub_upload() {
+  echo "[epub] Uploading ${EPUB_LOCAL} → ${EPUB_REMOTE}"
+  # --update を付与すると、ローカルが新しい場合のみ上書き
+  rclone copy "${EPUB_LOCAL}" "${EPUB_REMOTE}" --config /config/rclone.conf --progress --update ${RC_ENC}
+}
+
+# --------------------------------------------------
 # 定期 bisync
 # --------------------------------------------------
 periodic_sync() {
@@ -171,6 +180,7 @@ main() {
   initial_sync
   while :; do
     periodic_sync
+    epub_upload
     echo "[rclone] 60 分スリープ"
     sleep 3600
   done

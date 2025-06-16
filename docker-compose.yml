@@ -39,6 +39,7 @@ services:
       TZ: ${TZ}
     volumes:
       - webnovel:/share/data
+      - epub:/share/epub
       - ./files/webnovel:/files/webnovel:ro
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
@@ -60,6 +61,7 @@ services:
       TZ: ${TZ}
     volumes:
       - webnovel:/share/data
+      - epub:/share/epub
       - rclone-config:/config
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
@@ -67,6 +69,7 @@ services:
 volumes:
   narou_rb-tailscale:
   webnovel:
+  epub:
   rclone-config:
 
 networks:
