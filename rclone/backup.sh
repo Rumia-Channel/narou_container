@@ -178,15 +178,15 @@ periodic_sync() {
 # --------------------------------------------------
 main() {
   setup_rclone_conf
-  mkdir -p "${BISYNC_WORKDIR}"
-  find "${BISYNC_WORKDIR}" -maxdepth 1 -name '*.lck' -exec rm -f {} \;
   prepare_initial
-  mkdir -p "${LOCAL}" "${BACKUP_ROOT_LOCAL}"
+  # 必要なディレクトリをまとめて作成
+  mkdir -p "${LOCAL}" "${BACKUP_ROOT_LOCAL}" "${BISYNC_WORKDIR}"
   initial_sync
 
   while :; do
-    mkdir -p "${BISYNC_WORKDIR}"
-    find "${BISYNC_WORKDIR}" -maxdepth 1 -name '*.lck' -exec rm -f {} \;
+    # ループ開始時にステールロックを確実に削除
+    rm -f "${BISYNC_WORKDIR}"/*.lck 2>/dev/null || true
+
     periodic_sync
     epub_upload
     echo "[rclone] 60 分スリープ"
