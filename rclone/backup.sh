@@ -13,6 +13,12 @@ trap 'echo "[ERROR] 行:$LINENO で失敗"; exit 1' ERR
 WEBDAV_REMOTE_NAME=${WEBDAV_REMOTE_NAME:-mywebdav}
 
 # --------------------------------------------------
+# EPUB 用環境変数（未設定でもエラーにならないように定義）
+# --------------------------------------------------
+EPUB_LOCAL=${EPUB_LOCAL:-}
+EPUB_REMOTE=${EPUB_REMOTE:-}
+
+# --------------------------------------------------
 # rclone.conf 作成
 # --------------------------------------------------
 ENC_PASS="$(rclone obscure "${WEBDAV_PASS}")"
@@ -27,12 +33,12 @@ pass   = ${ENC_PASS}
 EOF
 
 # --------------------------------------------------
-# rclone に与える共通エンコードオプション
+# rclone に与える共通オプション
 # --------------------------------------------------
 RC_ENC="--local-encoding Raw --webdav-encoding Percent"
 
 # --------------------------------------------------
-# パス定義（定数はすべて大文字）
+# パス定義
 # --------------------------------------------------
 LOCAL="/share/data"
 REMOTE="${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}"
@@ -50,10 +56,10 @@ prepare_initial() {
   # ローカルが空なら stale マーカーを削除
   if [ ! "$(ls -A "${LOCAL}")" ]; then
     for f in ".ready" ".bisync_initialized"; do
-      if [ -f "${LOCAL}/${f}" ]; then
+      [ -f "${LOCAL}/${f}" ] && {
         echo "[cleanup] stale ${f} を削除"
         rm -f "${LOCAL}/${f}"
-      fi
+      }
     done
   fi
 }
@@ -63,12 +69,8 @@ prepare_initial() {
 # --------------------------------------------------
 check_and_restore_if_needed() {
   sub=$1
-  remote_size=$(rclone size "${REMOTE}/${sub}" \
-                  --config /config/rclone.conf --json ${RC_ENC} \
-                | jq '.bytes')
-  local_size=$(rclone size "${LOCAL}/${sub}" \
-                  --config /config/rclone.conf --json ${RC_ENC} \
-                | jq '.bytes')
+  remote_size=$(rclone size "${REMOTE}/${sub}" --config /config/rclone.conf --json ${RC_ENC} | jq '.bytes')
+  local_size=$(rclone size "${LOCAL}/${sub}" --config /config/rclone.conf --json ${RC_ENC} | jq '.bytes')
   if [ "${remote_size}" -gt "${local_size}" ]; then
     echo "[restore] ${sub} ${local_size}→${remote_size}B"
     rclone copy "${REMOTE}/${sub}" "${LOCAL}/${sub}" \
@@ -115,25 +117,23 @@ prune_backups() {
       date -u -d "@${CUTOFF}" +%Y-%m-%d 2>/dev/null \
       || date -u -r "${CUTOFF}" +%Y-%m-%d
     )
-    for sub in $(rclone lsd "${target_root}" \
-                   --config /config/rclone.conf ${RC_ENC} 2>/dev/null \
-                 | awk '{print $5}'); do
+    for sub in $(rclone lsd "${target_root}" --config /config/rclone.conf ${RC_ENC} 2>/dev/null | awk '{print $5}'); do
       [ "${sub}" \< "${THRESHOLD}" ] || continue
       echo "[prune][remote] purge ${sub}"
-      rclone purge "${target_root}/${sub}" \
-        --config /config/rclone.conf --verbose ${RC_ENC} || true
+      rclone purge "${target_root}/${sub}" --config /config/rclone.conf --verbose ${RC_ENC} || true
     done
   else
-    find "${target_root}" -mindepth 1 -maxdepth 1 \
-      -type d -mtime +7 \
-      -print -exec rm -rf {} \; || true
+    find "${target_root}" -mindepth 1 -maxdepth 1 -type d -mtime +7 -print -exec rm -rf {} \; || true
   fi
 }
 
 # --------------------------------------------------
-# EPUB 一方向アップロード
+# EPUB 一方向アップロード（変数が空なら何もしない）
 # --------------------------------------------------
 epub_upload() {
+  if [ -z "${EPUB_LOCAL}" ] || [ -z "${EPUB_REMOTE}" ]; then
+    return
+  fi
   echo "[epub] Uploading ${EPUB_LOCAL} → ${EPUB_REMOTE}"
   rclone copy "${EPUB_LOCAL}" "${EPUB_REMOTE}" \
     --config /config/rclone.conf --progress --update ${RC_ENC}
@@ -156,16 +156,16 @@ periodic_sync() {
     BISYNC_OPT=""
   fi
 
-  if rclone bisync "${LOCAL}" "${REMOTE}" \
+  if ! rclone bisync "${LOCAL}" "${REMOTE}" \
       --config /config/rclone.conf ${BISYNC_OPTS} \
       --backup-dir1 "${BACKUP_ROOT_LOCAL}/${today}" \
       --backup-dir2 "${BACKUP_ROOT_REMOTE}/${today}" \
       --checksum ${BISYNC_OPT} --verbose \
       --exclude ".ready" --exclude ".bisync_initialized" ${RC_ENC}; then
-    touch "${BISYNC_FLAG_FILE}"
-  else
     echo "[rclone] bisync に失敗、フラグをリセット"
     rm -f "${BISYNC_FLAG_FILE}"
+  else
+    touch "${BISYNC_FLAG_FILE}"
   fi
 
   prune_backups "${BACKUP_ROOT_REMOTE}" "remote"
@@ -173,7 +173,7 @@ periodic_sync() {
 }
 
 # --------------------------------------------------
-# メイン
+# メインループ
 # --------------------------------------------------
 main() {
   prepare_initial
