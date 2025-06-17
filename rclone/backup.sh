@@ -178,12 +178,14 @@ periodic_sync() {
 # --------------------------------------------------
 main() {
   setup_rclone_conf
+  mkdir -p "${BISYNC_WORKDIR}"
   find "${BISYNC_WORKDIR}" -maxdepth 1 -name '*.lck' -exec rm -f {} \;
   prepare_initial
   mkdir -p "${LOCAL}" "${BACKUP_ROOT_LOCAL}"
   initial_sync
 
   while :; do
+    mkdir -p "${BISYNC_WORKDIR}"
     find "${BISYNC_WORKDIR}" -maxdepth 1 -name '*.lck' -exec rm -f {} \;
     periodic_sync
     epub_upload
