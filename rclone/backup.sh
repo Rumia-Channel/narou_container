@@ -183,6 +183,7 @@ main() {
   initial_sync
 
   while :; do
+    find "${BISYNC_WORKDIR}" -maxdepth 1 -name '*.lck' -exec rm -f {} \;
     periodic_sync
     epub_upload
     echo "[rclone] 60 分スリープ"
