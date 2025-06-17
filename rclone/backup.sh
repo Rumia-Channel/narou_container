@@ -32,14 +32,14 @@ EOF
 RC_ENC="--local-encoding Raw --webdav-encoding Percent"
 
 # --------------------------------------------------
-# パス定義
+# パス定義（定数はすべて大文字）
 # --------------------------------------------------
 LOCAL="/share/data"
 REMOTE="${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}"
 BACKUP_ROOT_LOCAL="/share/_archive/data"
 BACKUP_ROOT_REMOTE="${WEBDAV_REMOTE_NAME}:archive${WEBDAV_PATH}"
 READY_FILE="${LOCAL}/.ready"
-bisync_flag_file="${LOCAL}/.bisync_initialized"
+BISYNC_FLAG_FILE="${LOCAL}/.bisync_initialized"
 BISYNC_WORKDIR="/config/bisync_work"
 
 # --------------------------------------------------
@@ -66,7 +66,7 @@ check_and_restore_if_needed() {
   remote_size=$(rclone size "${REMOTE}/${sub}" \
                   --config /config/rclone.conf --json ${RC_ENC} \
                 | jq '.bytes')
-  local_size=$(rclone size  "${LOCAL}/${sub}" \
+  local_size=$(rclone size "${LOCAL}/${sub}" \
                   --config /config/rclone.conf --json ${RC_ENC} \
                 | jq '.bytes')
   if [ "${remote_size}" -gt "${local_size}" ]; then
@@ -111,8 +111,10 @@ prune_backups() {
   if [ "${mode}" = "remote" ]; then
     NOW=$(date +%s)
     CUTOFF=$(( NOW - 7*24*3600 ))
-    THRESHOLD=$(date -u -d "@${CUTOFF}" +%Y-%m-%d 2>/dev/null \
-                || date -u -r "${CUTOFF}" +%Y-%m-%d)
+    THRESHOLD=$(
+      date -u -d "@${CUTOFF}" +%Y-%m-%d 2>/dev/null \
+      || date -u -r "${CUTOFF}" +%Y-%m-%d
+    )
     for sub in $(rclone lsd "${target_root}" \
                    --config /config/rclone.conf ${RC_ENC} 2>/dev/null \
                  | awk '{print $5}'); do
@@ -124,7 +126,7 @@ prune_backups() {
   else
     find "${target_root}" -mindepth 1 -maxdepth 1 \
       -type d -mtime +7 \
-      -print -exec rm -rf {} \\; || true
+      -print -exec rm -rf {} \; || true
   fi
 }
 
@@ -133,22 +135,21 @@ prune_backups() {
 # --------------------------------------------------
 epub_upload() {
   echo "[epub] Uploading ${EPUB_LOCAL} → ${EPUB_REMOTE}"
-  # --update を付与すると、ローカルが新しい場合のみ上書き
-  rclone copy "${EPUB_LOCAL}" "${EPUB_REMOTE}" --config /config/rclone.conf --progress --update ${RC_ENC}
+  rclone copy "${EPUB_LOCAL}" "${EPUB_REMOTE}" \
+    --config /config/rclone.conf --progress --update ${RC_ENC}
 }
 
 # --------------------------------------------------
 # 定期 bisync
 # --------------------------------------------------
 periodic_sync() {
-  local today
   today=$(date +%F)
   echo "[rclone] bisync start (backup ${today})"
 
   mkdir -p "${BISYNC_WORKDIR}"
-  bisync_opts="--workdir ${BISYNC_WORKDIR} --size-only --compare size"
+  BISYNC_OPTS="--workdir ${BISYNC_WORKDIR} --size-only --compare size"
 
-  if [ ! -f "${bisync_flag_file}" ]; then
+  if [ ! -f "${BISYNC_FLAG_FILE}" ]; then
     BISYNC_OPT="--resync"
     echo "  --resync (初回 or 復旧)"
   else
@@ -156,15 +157,15 @@ periodic_sync() {
   fi
 
   if rclone bisync "${LOCAL}" "${REMOTE}" \
-      --config /config/rclone.conf \
+      --config /config/rclone.conf ${BISYNC_OPTS} \
       --backup-dir1 "${BACKUP_ROOT_LOCAL}/${today}" \
       --backup-dir2 "${BACKUP_ROOT_REMOTE}/${today}" \
       --checksum ${BISYNC_OPT} --verbose \
       --exclude ".ready" --exclude ".bisync_initialized" ${RC_ENC}; then
-    touch "${bisync_flag_file}"
+    touch "${BISYNC_FLAG_FILE}"
   else
     echo "[rclone] bisync に失敗、フラグをリセット"
-    rm -f "${bisync_flag_file}"
+    rm -f "${BISYNC_FLAG_FILE}"
   fi
 
   prune_backups "${BACKUP_ROOT_REMOTE}" "remote"
