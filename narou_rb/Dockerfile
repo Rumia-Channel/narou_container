@@ -6,7 +6,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       bash curl expect git build-essential ca-certificates jq unzip && \
     curl -fsSL https://download.oracle.com/java/21/latest/jdk-21_linux-x64_bin.deb -o /tmp/jdk-21.deb && \
-    dpkg -i /tmp/jdk-21.deb || true && \
+    dpkg -i /tmp/jdk-21.deb && \
     apt-get -f install -y --no-install-recommends && \
     rm -f /tmp/jdk-21.deb && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -14,7 +14,10 @@ RUN apt-get update && \
 # specific_install と Bundler をインストール
 RUN gem install specific_install bundler --no-document
 
-# 作業ディレクトリを /share/data に設定
+# EPUB 出力用ディレクトリを作成
+WORKDIR /share/epub
+
+# 実データ格納用ディレクトリを作成かつ作業ディレクトリに設定
 WORKDIR /share/data
 
 # エントリポイントスクリプトをコピーし、実行権限を付与

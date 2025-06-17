@@ -4,7 +4,8 @@ FROM rclone/rclone:latest
 
 # jq とディレクトリ作成
 RUN apk add --no-cache jq coreutils findutils bash && \
-    mkdir -p /config
+    mkdir -p /config \
+    mkdir -p /share/epub
 
 # スクリプトを /config に配置
 COPY backup.sh /config/backup.sh

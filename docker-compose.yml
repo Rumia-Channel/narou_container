@@ -37,6 +37,7 @@ services:
       - narou_rb_tailscale
     environment:
       TZ: ${TZ}
+      NO_CONVERT_EPUB: ${NO_CONVERT_EPUB}
     volumes:
       - webnovel:/share/data
       - epub:/share/epub
@@ -58,6 +59,7 @@ services:
       WEBDAV_PASS:        ${WEBDAV_PASS}
       WEBDAV_VENDOR:      ${WEBDAV_VENDOR}
       WEBDAV_REMOTE_NAME: ${WEBDAV_REMOTE_NAME}
+      EPUB_REMOTE: ${EPUB_REMOTE}
       TZ: ${TZ}
     volumes:
       - webnovel:/share/data

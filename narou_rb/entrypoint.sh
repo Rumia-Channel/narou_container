@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
+java -version || {
+  echo "Java がインストールされていません。Java をインストールしてください。"
+  exit 1
+}
+
 # narou のインストール
 gem specific_install -b docker https://github.com/Rumia-Channel/narou.git
 
@@ -35,13 +40,13 @@ if [ ! -d .narousetting ]; then
 fi
 
 # ── ここで「already-server-boot」を true にしておく ──
-ruby -e "require 'narou'; \
-inv = Inventory.load('server_setting', :global); \
-inv['already-server-boot'] = true; \
-inv.save"
+ruby -e "require 'narou'; inv = Inventory.load('server_setting', :global); inv['already-server-boot'] = true; inv.save"
+
+# ── 取り外し可能デバイス検出を無効化（nil 例外回避） ──
+ruby -e "require 'narou'; class Narou::AppServer; def start_device_ejectable_event; end; end"
 
 # EPUB 作成を無効化（設定として永続化）
-narou setting convert.no-epub=true
+narou setting convert.no-epub=${NO_CONVERT_EPUB:-true}
 
 narou setting server-bind=0.0.0.0
 
