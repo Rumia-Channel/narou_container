@@ -178,6 +178,7 @@ periodic_sync() {
 # --------------------------------------------------
 main() {
   setup_rclone_conf
+  find "${BISYNC_WORKDIR}" -maxdepth 1 -name '*.lck' -exec rm -f {} \;
   prepare_initial
   mkdir -p "${LOCAL}" "${BACKUP_ROOT_LOCAL}"
   initial_sync
