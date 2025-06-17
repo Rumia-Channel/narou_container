@@ -21,9 +21,10 @@ EPUB_REMOTE=${EPUB_REMOTE:-}
 # --------------------------------------------------
 # rclone.conf 作成
 # --------------------------------------------------
-ENC_PASS="$(rclone obscure "${WEBDAV_PASS}")"
-mkdir -p /config
-cat > /config/rclone.conf <<EOF
+setup_rclone_conf() {
+  ENC_PASS="$(rclone obscure "${WEBDAV_PASS}")"
+  mkdir -p /config
+  cat > /config/rclone.conf <<EOF
 [${WEBDAV_REMOTE_NAME}]
 type   = webdav
 url    = ${WEBDAV_URL}
@@ -31,6 +32,7 @@ vendor = ${WEBDAV_VENDOR}
 user   = ${WEBDAV_USER}
 pass   = ${ENC_PASS}
 EOF
+}
 
 # --------------------------------------------------
 # rclone に与える共通オプション
@@ -53,7 +55,6 @@ BISYNC_WORKDIR="/config/bisync_work"
 # --------------------------------------------------
 prepare_initial() {
   mkdir -p "${LOCAL}"
-  # ローカルが空なら stale マーカーを削除
   if [ ! "$(ls -A "${LOCAL}")" ]; then
     for f in ".ready" ".bisync_initialized"; do
       [ -f "${LOCAL}/${f}" ] && {
@@ -70,7 +71,7 @@ prepare_initial() {
 check_and_restore_if_needed() {
   sub=$1
   remote_size=$(rclone size "${REMOTE}/${sub}" --config /config/rclone.conf --json ${RC_ENC} | jq '.bytes')
-  local_size=$(rclone size "${LOCAL}/${sub}" --config /config/rclone.conf --json ${RC_ENC} | jq '.bytes')
+  local_size=$(rclone size "${LOCAL}/${sub}"  --config /config/rclone.conf --json ${RC_ENC} | jq '.bytes')
   if [ "${remote_size}" -gt "${local_size}" ]; then
     echo "[restore] ${sub} ${local_size}→${remote_size}B"
     rclone copy "${REMOTE}/${sub}" "${LOCAL}/${sub}" \
@@ -176,9 +177,11 @@ periodic_sync() {
 # メインループ
 # --------------------------------------------------
 main() {
+  setup_rclone_conf
   prepare_initial
   mkdir -p "${LOCAL}" "${BACKUP_ROOT_LOCAL}"
   initial_sync
+
   while :; do
     periodic_sync
     epub_upload
@@ -187,4 +190,5 @@ main() {
   done
 }
 
+# スクリプト実行
 main "$@"
