@@ -3,7 +3,7 @@
 FROM rclone/rclone:latest
 
 # jq とディレクトリ作成
-RUN apk add --no-cache jq coreutils findutils bash && \
+RUN apk add --no-cache jq coreutils findutils bash dos2unix && \
     mkdir -p /config \
     mkdir -p /share/epub
 

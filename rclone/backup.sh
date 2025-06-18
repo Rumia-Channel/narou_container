@@ -185,6 +185,12 @@ main() {
 
   find /share/data -type f -name toc.yaml -exec sed -i 's/[\x00-\x08\x0B\x0C\x0E-\x1F]//g' {} \;
 
+  # CRLF→LF 化（改行コードを Unix 形式に統一）
+  if command -v dos2unix >/dev/null 2>&1; then
+    echo "[cleanup] dos2unix で改行コードを変換中..."
+    find /share/data -type f -exec dos2unix {} +
+  fi
+
   while :; do
     # ループ開始時にステールロックを確実に削除
     rm -f "${BISYNC_WORKDIR}"/*.lck 2>/dev/null || true
