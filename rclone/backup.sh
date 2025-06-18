@@ -197,6 +197,8 @@ main() {
 
     periodic_sync
     epub_upload
+    echo "[cleanup] dos2unix で改行コードを変換中..."
+    find /share/data -type f -exec dos2unix {} +
     echo "[rclone] 60 分スリープ"
     sleep 3600
   done
