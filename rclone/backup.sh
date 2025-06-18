@@ -183,6 +183,8 @@ main() {
   mkdir -p "${LOCAL}" "${BACKUP_ROOT_LOCAL}" "${BISYNC_WORKDIR}"
   initial_sync
 
+  find /share/data -type f -name toc.yaml -exec sed -i 's/[\x00-\x08\x0B\x0C\x0E-\x1F]//g' {} \;
+
   while :; do
     # ループ開始時にステールロックを確実に削除
     rm -f "${BISYNC_WORKDIR}"/*.lck 2>/dev/null || true
