@@ -183,12 +183,19 @@ main() {
   mkdir -p "${LOCAL}" "${BACKUP_ROOT_LOCAL}" "${BISYNC_WORKDIR}"
   initial_sync
 
-  find /share/data -type f -name toc.yaml -exec sed -i 's/[\x00-\x08\x0B\x0C\x0E-\x1F]//g' {} \;
-
   # CRLF→LF 化（改行コードを Unix 形式に統一）
   if command -v dos2unix >/dev/null 2>&1; then
     echo "[cleanup] dos2unix で改行コードを変換中..."
-    find /share/data -type f -exec dos2unix {} +
+    find /share/data -type f -exec bash -c '
+      for f; do
+        if grep -Iq "" "$f"; then
+          echo "[cleanup] dos2unix $f"
+          dos2unix "$f"
+        else
+          echo "[skip] binary $f"
+        fi
+      done
+    ' _ {} +
   fi
 
   while :; do
@@ -198,7 +205,16 @@ main() {
     periodic_sync
     epub_upload
     echo "[cleanup] dos2unix で改行コードを変換中..."
-    find /share/data -type f -exec dos2unix {} +
+    find /share/data -type f -exec bash -c '
+      for f; do
+        if grep -Iq "" "$f"; then
+          echo "[cleanup] dos2unix $f"
+          dos2unix "$f"
+        else
+          echo "[skip] binary $f"
+        fi
+      done
+    ' _ {} +
     echo "[rclone] 60 分スリープ"
     sleep 3600
   done
