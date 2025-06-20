@@ -16,7 +16,7 @@ WEBDAV_REMOTE_NAME=${WEBDAV_REMOTE_NAME:-mywebdav}
 # EPUB 用環境変数（未設定でもエラーにならないように定義）
 # --------------------------------------------------
 EPUB_LOCAL=/share/epub
-EPUB_REMOTE="${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}/epub"
+EPUB_REMOTE="${WEBDAV_REMOTE_NAME}:${EPUB_REMOTE}/epub"
 
 # --------------------------------------------------
 # rclone.conf 作成
