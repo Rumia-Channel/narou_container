@@ -22,6 +22,7 @@ services:
     network_mode: "service:narou_rb_tailscale"
     depends_on:
       - narou_rb_tailscale
+    restart: always
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/ssl:/etc/nginx/ssl
