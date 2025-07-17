@@ -54,4 +54,4 @@ narou setting convert.copy-to=/share/epub
 
 narou setting user-agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
 
-narou web -p 3641 --no-browser
+NAROU_DEBUG=1 narou web -p 3641 --no-browser
