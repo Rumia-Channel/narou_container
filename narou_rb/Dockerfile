@@ -4,7 +4,7 @@ FROM ruby:slim-bookworm
 # 必要最低限のパッケージ（git やビルドに必要なツールなど）
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      bash curl expect git build-essential ca-certificates jq unzip && \
+      bash curl expect git build-essential ca-certificates jq unzip wget && \
     curl -fsSL https://download.oracle.com/java/21/latest/jdk-21_linux-x64_bin.deb -o /tmp/jdk-21.deb && \
     dpkg -i /tmp/jdk-21.deb && \
     apt-get -f install -y --no-install-recommends && \
