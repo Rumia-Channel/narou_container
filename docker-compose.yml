@@ -40,6 +40,7 @@ services:
     environment:
       TZ: ${TZ}
       NO_CONVERT_EPUB: ${NO_CONVERT_EPUB}
+      AUTO_ADD_TAG: ${AUTO_ADD_TAG}
     volumes:
       - webnovel:/share/data
       - epub:/share/epub
