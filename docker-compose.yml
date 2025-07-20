@@ -41,6 +41,8 @@ services:
       TZ: ${TZ}
       NO_CONVERT_EPUB: ${NO_CONVERT_EPUB}
       AUTO_ADD_TAG: ${AUTO_ADD_TAG}
+      AUTO_UPDATE: ${AUTO_UPDATE}
+      AUTO_UPDATE_TIME: ${AUTO_UPDATE_TIME}
     volumes:
       - webnovel:/share/data
       - epub:/share/epub
