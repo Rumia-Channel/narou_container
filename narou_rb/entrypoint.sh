@@ -61,4 +61,7 @@ narou setting update.auto-schedule=${AUTO_UPDATE_TIME:-0300,1500}
 
 narou setting user-agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
 
-NAROU_DEBUG=1 narou web -p 3641 --no-browser
+narou setting download.choices-of-digest-options=${AUTO_DIGEST_OPTIONS:-8,4,1}
+
+# NAROU_DEBUG=1
+narou web -p 3641 --no-browser
