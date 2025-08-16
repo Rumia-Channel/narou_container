@@ -14,13 +14,39 @@ log(){ echo "[$(date +%H:%M:%S)] $*"; }
 
 # ─── 既存デバイスの重複登録を削除 ───────────────────────
 log "purge duplicates of ${FQDN}"
-curl -s -u "${TS_ADMIN_KEY}:" \
-  "https://api.tailscale.com/api/v2/tailnet/${TAILNET_NAME}/devices" |
-  jq -r '.devices[] | select(.name=="'"${FQDN}"'") | .id' |
+
+# Tailscale Admin API は tailnet 名を URL エンコードした方が安全
+TAILNET_ENC="$(printf '%s' "${TAILNET_NAME}" | jq -sRr @uri)"
+
+# JSON をいったん変数に取り、null や失敗でも落ちないようにする
+devices_json="$(curl -sf -u "${TS_ADMIN_KEY}:" \
+  "https://api.tailscale.com/api/v2/tailnet/${TAILNET_ENC}/devices" \
+  2>/dev/null || true)"
+: "${devices_json:=null}"
+
+# 同名の端末を抽出し、全件削除
+# lastSeen が無ければ created を、どちらも無ければ 0 をキーにソート
+dupe_ids="$(printf '%s' "${devices_json}" \
+  | jq -r --arg name "${FQDN}" '
+      (.devices? // [])
+      | map(select(.name == $name))
+      | .[]?                         # ← 全件
+      | .id
+    ' 2>/dev/null || true)"
+
+if [ -z "${dupe_ids}" ]; then
+  log "no duplicates for ${FQDN}"
+else
   while read -r id; do
-    [ -n "$id" ] && curl -sf -u "${TS_ADMIN_KEY}:" -X DELETE \
-      "https://api.tailscale.com/api/v2/device/${id}" && log "  deleted ${id}"
-  done
+    [ -z "${id}" ] && continue
+    if curl -sf -u "${TS_ADMIN_KEY}:" -X DELETE \
+         "https://api.tailscale.com/api/v2/device/${id}" >/dev/null; then
+      log "  deleted ${id}"
+    else
+      log "[warn] failed to delete ${id}"
+    fi
+  done <<< "${dupe_ids}"
+fi
 
 # ─── tailscaled をバックグラウンドで起動 ─────────────────────
 log "start tailscaled"
