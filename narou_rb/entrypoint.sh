@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
+# 追加推奨: ここで UTF-8 を強制しておく
+export LANG=ja_JP.UTF-8 LC_ALL=ja_JP.UTF-8 LANGUAGE=ja_JP:ja TZ=Asia/Tokyo
+export RUBYOPT='-EUTF-8:UTF-8'
+
 java -version || {
   echo "Java がインストールされていません。Java をインストールしてください。"
   exit 1
 }
+
+ruby -e 'p [Encoding.default_external, Encoding.default_internal]'
+# 期待: ["UTF-8", "UTF-8"] もしくは ["UTF-8", nil]
 
 # narou のインストール
 gem specific_install -b docker https://github.com/Rumia-Channel/narou.git
@@ -21,7 +28,7 @@ u=$(curl -s https://api.github.com/repos/kyukyunyorituryo/AozoraEpub3/releases/l
     | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
 mkdir -p "$DIR"
 curl -L "$u" -o "$DIR/$(basename "$u")"
-unzip -q -o -d "$DIR" "$DIR/$(basename "$u")"
+unzip -q -o -d "$DIR" "$DIR/$(basename "$u")" || unzip -O cp932 -q -o -d "$DIR" "$DIR/$(basename "$u")"
 rm "$DIR/$(basename "$u")"
 
 # 作業ディレクトリを /share/data に移動
@@ -64,4 +71,4 @@ narou setting user-agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:140.0) Geck
 narou setting download.choices-of-digest-options=${AUTO_DIGEST_OPTIONS:-8,4,1}
 
 # NAROU_DEBUG=1 narou web -p 3641 --no-browser
-narou web -p 3641 --no-browser
+RUBYOPT='-EUTF-8:UTF-8' narou web -p 3641 --no-browser
