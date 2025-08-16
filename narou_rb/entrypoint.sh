@@ -14,6 +14,10 @@ ruby -e 'p [Encoding.default_external, Encoding.default_internal]'
 # 期待: ["UTF-8", "UTF-8"] もしくは ["UTF-8", nil]
 
 # narou のインストール
+# 追加: specific_install が未導入なら入れてから使う
+if ! gem list -i specific_install >/dev/null 2>&1; then
+  gem install specific_install --no-document
+fi
 gem specific_install -b docker https://github.com/Rumia-Channel/narou.git
 
 echo "[Narou rb] /share/data に .ready ファイルを待機中…"
