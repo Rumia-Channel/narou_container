@@ -13,6 +13,9 @@ java -version || {
 ruby -e 'p [Encoding.default_external, Encoding.default_internal]'
 # 期待: ["UTF-8", "UTF-8"] もしくは ["UTF-8", nil]
 
+#gemのクリーンアップ
+gem uninstall -aIx
+
 # narou のインストール
 # 追加: specific_install が未導入なら入れてから使う
 if ! gem list -i specific_install >/dev/null 2>&1; then
