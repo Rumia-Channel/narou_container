@@ -47,6 +47,7 @@ services:
     volumes:
       - webnovel:/share/data
       - epub:/share/epub
+      - zip:/share/zip
       - ./files/webnovel:/files/webnovel:ro
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
@@ -66,10 +67,12 @@ services:
       WEBDAV_VENDOR:      ${WEBDAV_VENDOR}
       WEBDAV_REMOTE_NAME: ${WEBDAV_REMOTE_NAME}
       EPUB_REMOTE: ${EPUB_REMOTE}
+      ZIP_REMOTE: ${ZIP_REMOTE}
       TZ: ${TZ}
     volumes:
       - webnovel:/share/data
       - epub:/share/epub
+      - zip:/share/zip
       - rclone-config:/config
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
@@ -78,6 +81,7 @@ volumes:
   narou_rb-tailscale:
   webnovel:
   epub:
+  zip:
   rclone-config:
 
 networks:

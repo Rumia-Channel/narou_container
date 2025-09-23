@@ -63,6 +63,8 @@ narou setting server-bind=0.0.0.0
 
 narou setting convert.copy-to=/share/epub
 
+narou setting convert.copy-zip-to=/share/zip
+
 narou setting over18=true
 
 narou setting auto-add-tags=${AUTO_ADD_TAG:-true}

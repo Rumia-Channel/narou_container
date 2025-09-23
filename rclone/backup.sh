@@ -16,7 +16,9 @@ WEBDAV_REMOTE_NAME=${WEBDAV_REMOTE_NAME:-mywebdav}
 # EPUB 用環境変数（未設定でもエラーにならないように定義）
 # --------------------------------------------------
 EPUB_LOCAL=/share/epub
+ZIP_LOCAL=/share/zip
 EPUB_REMOTE="${WEBDAV_REMOTE_NAME}:${EPUB_REMOTE}/epub"
+ZIP_REMOTE="${WEBDAV_REMOTE_NAME}:${ZIP_REMOTE}/i文庫"
 
 # --------------------------------------------------
 # rclone.conf 作成
@@ -137,6 +139,18 @@ epub_upload() {
   fi
   echo "[epub] Uploading ${EPUB_LOCAL} → ${EPUB_REMOTE}"
   rclone copy "${EPUB_LOCAL}" "${EPUB_REMOTE}" \
+    --config /config/rclone.conf --progress --update ${RC_ENC}
+}
+
+# --------------------------------------------------
+# ZIP 一方向アップロード（変数が空なら何もしない）
+# --------------------------------------------------
+zip_upload() {
+  if [ -z "${ZIP_LOCAL}" ] || [ -z "${ZIP_REMOTE}" ]; then
+    return
+  fi
+  echo "[zip] Uploading ${ZIP_LOCAL} → ${ZIP_REMOTE}"
+  rclone copy "${ZIP_LOCAL}" "${ZIP_REMOTE}" \
     --config /config/rclone.conf --progress --update ${RC_ENC}
 }
 
