@@ -18,7 +18,7 @@ WEBDAV_REMOTE_NAME=${WEBDAV_REMOTE_NAME:-mywebdav}
 EPUB_LOCAL=/share/epub
 ZIP_LOCAL=/share/zip
 EPUB_REMOTE="${WEBDAV_REMOTE_NAME}:${EPUB_REMOTE}/epub"
-ZIP_REMOTE="${WEBDAV_REMOTE_NAME}:${ZIP_REMOTE}/i文庫"
+ZIP_REMOTE="${WEBDAV_REMOTE_NAME}:${ZIP_REMOTE}/zip"
 
 # --------------------------------------------------
 # rclone.conf 作成

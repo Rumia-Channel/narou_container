@@ -67,6 +67,8 @@ narou setting convert.copy-zip-to=/share/zip
 
 narou setting over18=true
 
+narou setting convert.make-zip=${MAKE_ZIP:-true}
+
 narou setting auto-add-tags=${AUTO_ADD_TAG:-true}
 
 narou setting update.auto-schedule.enable=${AUTO_UPDATE:-true}
