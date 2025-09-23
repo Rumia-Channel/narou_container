@@ -218,6 +218,7 @@ main() {
 
     periodic_sync
     epub_upload
+    zip_upload
     echo "[cleanup] dos2unix で改行コードを変換中..."
     find /share/data -type f -exec bash -c '
       for f; do
