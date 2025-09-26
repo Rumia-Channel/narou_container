@@ -18,7 +18,7 @@ trap 'rc=$?; if [ $rc -ne 0 ]; then echo "[ERROR] スクリプトが異常終了
 : "${WEBDAV_VENDOR:?WEBDAV_VENDOR が未設定です}"
 : "${WEBDAV_USER:?WEBDAV_USER が未設定です}"
 : "${WEBDAV_PASS:?WEBDAV_PASS が未設定です}"
-: "${WEBDAV_PATH:?WEBDAV_PATH が未設定です}"
+: "${WEBDAV_PATH:?WEBDAV_PATH が未設定です}"   # ベース URL 配下の bisync 用ルート
 WEBDAV_REMOTE_NAME="${WEBDAV_REMOTE_NAME:-mywebdav}"
 
 # 末尾スラッシュ事故防止（URL もパスも）
@@ -26,18 +26,51 @@ WEBDAV_URL="${WEBDAV_URL%/}"
 WEBDAV_PATH="${WEBDAV_PATH%/}"
 
 # --------------------------------------------------
-# EPUB/ZIP 送信用の既定値（未設定でも動作継続）
+# .env 互換の EPUB/ZIP 設定
+#  - EPUB_REMOTE / ZIP_REMOTE は「WebDAV ルート直下の親ディレクトリ」を表す
+#    例) EPUB_REMOTE=webnovels → <remote>/webnovels/epub
+#        EPUB_REMOTE=""       → <remote>/epub
+#  - rclone の remote 名は本スクリプトが付与する（`.env` では remote 名を書かない）
 # --------------------------------------------------
 EPUB_LOCAL="${EPUB_LOCAL:-/share/epub}"
 ZIP_LOCAL="${ZIP_LOCAL:-/share/zip}"
-EPUB_REMOTE="${EPUB_REMOTE:-${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}/epub}"
-ZIP_REMOTE="${ZIP_REMOTE:-${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}/zip}"
+
+# .env から受け取る値（空可、「/」先頭/末尾はどちらでも可）
+EPUB_REMOTE="${EPUB_REMOTE:-}"   # 親ディレクトリ (例: "webnovels" / "")
+ZIP_REMOTE="${ZIP_REMOTE:-}"     # 親ディレクトリ (例: "webnovels" / "")
+
+# sanitize: 先頭/末尾のスラッシュを除去
+_trim_slashes() {
+  # 引数が空でも安全
+  p="$1"
+  p="${p#/}"   # 先頭 /
+  p="${p%/}"   # 末尾 /
+  printf '%s' "$p"
+}
+
+_epub_parent="$(_trim_slashes "$EPUB_REMOTE")"
+_zip_parent="$(_trim_slashes "$ZIP_REMOTE")"
+
+# rclone 用の最終 REMOTE パスを合成（remote 名はここで付与）
+# 例) 親が "webnovels" → mywebdav:webnovels/epub
+#     親が ""          → mywebdav:epub
+if [ -n "$_epub_parent" ]; then
+  EPUB_REMOTE_FULL="${WEBDAV_REMOTE_NAME}:${_epub_parent}/epub"
+else
+  EPUB_REMOTE_FULL="${WEBDAV_REMOTE_NAME}:epub"
+fi
+
+if [ -n "$_zip_parent" ]; then
+  ZIP_REMOTE_FULL="${WEBDAV_REMOTE_NAME}:${_zip_parent}/zip"
+else
+  ZIP_REMOTE_FULL="${WEBDAV_REMOTE_NAME}:zip"
+fi
 
 # --------------------------------------------------
-# 共通パス/設定
+# 共通パス/設定（bisync は WEBDAV_PATH を使う）
 # --------------------------------------------------
 LOCAL="/share/data"
-REMOTE="${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}"
+REMOTE="${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}"                 # bisync の相手
 BACKUP_ROOT_LOCAL="/share/_archive/data"
 # リモート側バックアップも WEBDAV_PATH 配下に統一
 BACKUP_ROOT_REMOTE="${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}/_archive/data"
@@ -183,28 +216,29 @@ prune_backups_local() {
 }
 
 # --------------------------------------------------
-# EPUB/ZIP 一方向アップロード（設定が空ならスキップ）
+# EPUB/ZIP 一方向アップロード（.env に合わせた remote 解釈）
+#   - EPUB_LOCAL/ZIP_LOCAL が空 or ディレクトリ不存在ならスキップ
+#   - REMOTE は EPUB_REMOTE_FULL / ZIP_REMOTE_FULL を使用
 # --------------------------------------------------
 epub_upload() {
-  [ -n "${EPUB_LOCAL}" ] && [ -n "${EPUB_REMOTE}" ] || return 0
-  if [ -d "${EPUB_LOCAL}" ]; then
-    echo "[epub] Uploading ${EPUB_LOCAL} → ${EPUB_REMOTE}"
-    rclone copy "${EPUB_LOCAL}" "${EPUB_REMOTE}" \
-      --config /config/rclone.conf --progress --update \
-      --exclude ".ready" --exclude ".bisync_initialized" \
-      ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV}
-  fi
+  [ -n "${EPUB_LOCAL}" ] || return 0
+  [ -d "${EPUB_LOCAL}" ] || return 0
+  # `.env` 由来の最終 remote パスを使用（mywebdav:<parent>/epub or mywebdav:epub）
+  echo "[epub] Uploading ${EPUB_LOCAL} → ${EPUB_REMOTE_FULL}"
+  rclone copy "${EPUB_LOCAL}" "${EPUB_REMOTE_FULL}" \
+    --config /config/rclone.conf --progress --update \
+    --exclude ".ready" --exclude ".bisync_initialized" \
+    ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV}
 }
 
 zip_upload() {
-  [ -n "${ZIP_LOCAL}" ] && [ -n "${ZIP_REMOTE}" ] || return 0
-  if [ -d "${ZIP_LOCAL}" ]; then
-    echo "[zip ] Uploading ${ZIP_LOCAL} → ${ZIP_REMOTE}"
-    rclone copy "${ZIP_LOCAL}" "${ZIP_REMOTE}" \
-      --config /config/rclone.conf --progress --update \
-      --exclude ".ready" --exclude ".bisync_initialized" \
-      ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV}
-  fi
+  [ -n "${ZIP_LOCAL}" ] || return 0
+  [ -d "${ZIP_LOCAL}" ] || return 0
+  echo "[zip ] Uploading ${ZIP_LOCAL} → ${ZIP_REMOTE_FULL}"
+  rclone copy "${ZIP_LOCAL}" "${ZIP_REMOTE_FULL}" \
+    --config /config/rclone.conf --progress --update \
+    --exclude ".ready" --exclude ".bisync_initialized" \
+    ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV}
 }
 
 # --------------------------------------------------
