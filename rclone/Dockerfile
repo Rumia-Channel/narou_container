@@ -1,17 +1,17 @@
 # rclone/Dockerfile
-
 FROM rclone/rclone:latest
 
-# jq とディレクトリ作成
-RUN apk add --no-cache jq coreutils findutils bash dos2unix && \
-    mkdir -p /config \
-    mkdir -p /share/epub
+# 必要最小限のパッケージだけ追加
+# - jq        : rclone size --json の解析
+# - findutils : GNU find（-print0/ -d '' を使うため）
+# - dos2unix  : 改行コード正規化（任意利用）
+RUN set -eux; \
+    apk add --no-cache jq findutils dos2unix && \
+    mkdir -p /config /share/epub /share/zip /share/_archive/data /config/bisync_work
 
-# スクリプトを /config に配置
+# スクリプト配置（実行権限付与）
 COPY backup.sh /config/backup.sh
+RUN chmod 0755 /config/backup.sh
 
-# 実行権限を付与
-RUN chmod +x /config/backup.sh
-
-# ENTRYPOINT を /config/backup.sh に
-ENTRYPOINT ["/bin/bash", "/config/backup.sh"]
+# BusyBox/ash で実行（bash は不要）
+ENTRYPOINT ["/bin/sh", "/config/backup.sh"]

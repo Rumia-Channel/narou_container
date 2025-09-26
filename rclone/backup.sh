@@ -1,31 +1,69 @@
 #!/bin/sh
-set -euo pipefail
-trap 'echo "[ERROR] 行:$LINENO で失敗"; exit 1' ERR
+# WebDAV <-> ローカルの定期 bisync と単方向アップロードを行う運用スクリプト
+# Alpine/BusyBox(ash) でも安全に動くように調整（trap/pipefail/print0 等）
 
 # --------------------------------------------------
-# 環境変数チェック
+# シェル動作: ash でも落ちないように pipefail はベストエフォート
+# --------------------------------------------------
+set -eu
+(set -o pipefail) 2>/dev/null || true
+
+# bash の ERR トラップは ash で非対応のため、EXIT でまとめて通知
+trap 'rc=$?; if [ $rc -ne 0 ]; then echo "[ERROR] スクリプトが異常終了 (rc=$rc)"; fi' EXIT
+
+# --------------------------------------------------
+# 必須環境変数
 # --------------------------------------------------
 : "${WEBDAV_URL:?WEBDAV_URL が未設定です}"
 : "${WEBDAV_VENDOR:?WEBDAV_VENDOR が未設定です}"
 : "${WEBDAV_USER:?WEBDAV_USER が未設定です}"
 : "${WEBDAV_PASS:?WEBDAV_PASS が未設定です}"
 : "${WEBDAV_PATH:?WEBDAV_PATH が未設定です}"
-WEBDAV_REMOTE_NAME=${WEBDAV_REMOTE_NAME:-mywebdav}
+WEBDAV_REMOTE_NAME="${WEBDAV_REMOTE_NAME:-mywebdav}"
+
+# 末尾スラッシュ事故防止（URL もパスも）
+WEBDAV_URL="${WEBDAV_URL%/}"
+WEBDAV_PATH="${WEBDAV_PATH%/}"
 
 # --------------------------------------------------
-# EPUB 用環境変数（未設定でもエラーにならないように定義）
+# EPUB/ZIP 送信用の既定値（未設定でも動作継続）
 # --------------------------------------------------
-EPUB_LOCAL=/share/epub
-ZIP_LOCAL=/share/zip
-EPUB_REMOTE="${WEBDAV_REMOTE_NAME}:${EPUB_REMOTE}/epub"
-ZIP_REMOTE="${WEBDAV_REMOTE_NAME}:${ZIP_REMOTE}/zip"
+EPUB_LOCAL="${EPUB_LOCAL:-/share/epub}"
+ZIP_LOCAL="${ZIP_LOCAL:-/share/zip}"
+EPUB_REMOTE="${EPUB_REMOTE:-${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}/epub}"
+ZIP_REMOTE="${ZIP_REMOTE:-${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}/zip}"
 
 # --------------------------------------------------
-# rclone.conf 作成
+# 共通パス/設定
+# --------------------------------------------------
+LOCAL="/share/data"
+REMOTE="${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}"
+BACKUP_ROOT_LOCAL="/share/_archive/data"
+# リモート側バックアップも WEBDAV_PATH 配下に統一
+BACKUP_ROOT_REMOTE="${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}/_archive/data"
+READY_FILE="${LOCAL}/.ready"
+BISYNC_FLAG_FILE="${LOCAL}/.bisync_initialized"
+BISYNC_WORKDIR="/config/bisync_work"
+
+# rclone のエンコーディング（スペース/特殊文字対策）
+RC_ENC_LOCAL="--local-encoding=Raw"
+RC_ENC_WEBDAV="--webdav-encoding=Percent"
+
+log() { echo "[$(date +%H:%M:%S)] $*"; }
+
+# --------------------------------------------------
+# 依存コマンド確認（jq は任意、rclone は必須）
+# --------------------------------------------------
+command -v rclone >/dev/null 2>&1 || { echo "[FATAL] rclone が必要です"; exit 1; }
+command -v jq >/dev/null 2>&1 || echo "[warn] jq 不在: rclone size の JSON 解析は 0 扱いになります"
+
+# --------------------------------------------------
+# rclone.conf 作成（権限制限）
 # --------------------------------------------------
 setup_rclone_conf() {
   ENC_PASS="$(rclone obscure "${WEBDAV_PASS}")"
   mkdir -p /config
+  umask 077
   cat > /config/rclone.conf <<EOF
 [${WEBDAV_REMOTE_NAME}]
 type   = webdav
@@ -37,53 +75,67 @@ EOF
 }
 
 # --------------------------------------------------
-# rclone に与える共通オプション
-# --------------------------------------------------
-RC_ENC="--local-encoding Raw --webdav-encoding Percent"
-
-# --------------------------------------------------
-# パス定義
-# --------------------------------------------------
-LOCAL="/share/data"
-REMOTE="${WEBDAV_REMOTE_NAME}:${WEBDAV_PATH}"
-BACKUP_ROOT_LOCAL="/share/_archive/data"
-BACKUP_ROOT_REMOTE="${WEBDAV_REMOTE_NAME}:archive${WEBDAV_PATH}"
-READY_FILE="${LOCAL}/.ready"
-BISYNC_FLAG_FILE="${LOCAL}/.bisync_initialized"
-BISYNC_WORKDIR="/config/bisync_work"
-
-# --------------------------------------------------
-# マーカーリセット
+# 初期マーカー整備
 # --------------------------------------------------
 prepare_initial() {
   mkdir -p "${LOCAL}"
-  if [ ! "$(ls -A "${LOCAL}")" ]; then
+  # 空ディレクトリなら古いマーカーをクリーン
+  if [ -z "$(ls -A "${LOCAL}" 2>/dev/null || true)" ]; then
     for f in ".ready" ".bisync_initialized"; do
-      [ -f "${LOCAL}/${f}" ] && {
+      if [ -f "${LOCAL}/${f}" ]; then
         echo "[cleanup] stale ${f} を削除"
         rm -f "${LOCAL}/${f}"
-      }
+      fi
     done
   fi
 }
 
 # --------------------------------------------------
-# サイズ比較＆復元
+# JSON の .bytes を数値で返す（jq 無ければ 0）
 # --------------------------------------------------
-check_and_restore_if_needed() {
-  sub=$1
-  remote_size=$(rclone size "${REMOTE}/${sub}" --config /config/rclone.conf --json ${RC_ENC} | jq '.bytes')
-  local_size=$(rclone size "${LOCAL}/${sub}"  --config /config/rclone.conf --json ${RC_ENC} | jq '.bytes')
-  if [ "${remote_size}" -gt "${local_size}" ]; then
-    echo "[restore] ${sub} ${local_size}→${remote_size}B"
-    rclone copy "${REMOTE}/${sub}" "${LOCAL}/${sub}" \
-      --config /config/rclone.conf --progress \
-      --exclude ".ready" --exclude ".bisync_initialized" ${RC_ENC}
+json_bytes_or_zero() {
+  if command -v jq >/dev/null 2>&1; then
+    jq -r '.bytes // 0' 2>/dev/null || echo 0
+  else
+    echo 0
   fi
 }
 
 # --------------------------------------------------
-# 初回同期
+# サイズ比較してローカル不足分のみ復元（エラー耐性あり）
+# --------------------------------------------------
+check_and_restore_if_needed() {
+  sub="$1"
+
+  remote_size="$(
+    rclone size "${REMOTE}/${sub}" --config /config/rclone.conf --json \
+      --exclude ".ready" --exclude ".bisync_initialized" \
+      ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV} 2>/dev/null \
+    | json_bytes_or_zero
+  )"
+
+  local_size="$(
+    rclone size "${LOCAL}/${sub}" --config /config/rclone.conf --json \
+      --exclude ".ready" --exclude ".bisync_initialized" \
+      ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV} 2>/dev/null \
+    | json_bytes_or_zero
+  )"
+
+  : "${remote_size:=0}"
+  : "${local_size:=0}"
+
+  # POSIX では -gt は整数前提
+  if [ "${remote_size}" -gt "${local_size}" ]; then
+    echo "[restore] ${sub} ${local_size}→${remote_size}B"
+    rclone copy "${REMOTE}/${sub}" "${LOCAL}/${sub}" \
+      --config /config/rclone.conf --progress --update \
+      --exclude ".ready" --exclude ".bisync_initialized" \
+      ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV}
+  fi
+}
+
+# --------------------------------------------------
+# 初回同期（フル）
 # --------------------------------------------------
 initial_sync() {
   if [ -f "${READY_FILE}" ]; then
@@ -91,100 +143,120 @@ initial_sync() {
     return
   fi
 
-  echo "[rclone] 初回フルコピー ('.ready' '.bisync_initialized' を除外)"
+  echo "[rclone] 初回フルコピー ('.ready' '.bisync_initialized' 除外)"
   rclone sync "${REMOTE}" "${LOCAL}" \
     --config /config/rclone.conf --progress \
-    --exclude ".ready" --exclude ".bisync_initialized" ${RC_ENC}
+    --exclude ".ready" --exclude ".bisync_initialized" \
+    ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV}
 
-  for path in "${LOCAL}"/*; do
-    [ -d "${path}" ] && check_and_restore_if_needed "${path##*/}"
-  done
+  # 直下のディレクトリを列挙してサイズ補正（NUL 区切りで安全に）
+  find "${LOCAL}" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null \
+  | while IFS= read -r -d '' path; do
+      name="$(basename "$path")"
+      check_and_restore_if_needed "$name"
+    done
 
-  touch "${READY_FILE}"
+  : > "${READY_FILE}"
   echo "[rclone] 初回完了 (.ready 作成)"
 }
 
 # --------------------------------------------------
 # バックアップ世代整理
+#   - remote: ファイル年齢で削除 → 空ディレクトリを掃除
+#   - local : mtime で削除 → 空ディレクトリ掃除
 # --------------------------------------------------
-prune_backups() {
-  target_root="$1"
-  mode="$2"
+prune_backups_remote() {
+  # 7日より前のファイルを削除し、空ディレクトリを削除（ルートは残す）
+  echo "[prune][remote] ${BACKUP_ROOT_REMOTE} : 7日より前のファイル/空ディレクトリを削除"
+  rclone delete "${BACKUP_ROOT_REMOTE}" --config /config/rclone.conf --min-age 7d \
+    ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV} 2>/dev/null || true
+  rclone rmdirs "${BACKUP_ROOT_REMOTE}" --config /config/rclone.conf --leave-root \
+    ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV} 2>/dev/null || true
+}
 
-  echo "[prune][${mode}] ${target_root} : 7日より前の世代を削除"
-
-  if [ "${mode}" = "remote" ]; then
-    NOW=$(date +%s)
-    CUTOFF=$(( NOW - 7*24*3600 ))
-    THRESHOLD=$(
-      date -u -d "@${CUTOFF}" +%Y-%m-%d 2>/dev/null \
-      || date -u -r "${CUTOFF}" +%Y-%m-%d
-    )
-    for sub in $(rclone lsd "${target_root}" --config /config/rclone.conf ${RC_ENC} 2>/dev/null | awk '{print $5}'); do
-      [ "${sub}" \< "${THRESHOLD}" ] || continue
-      echo "[prune][remote] purge ${sub}"
-      rclone purge "${target_root}/${sub}" --config /config/rclone.conf --verbose ${RC_ENC} || true
-    done
-  else
-    find "${target_root}" -mindepth 1 -maxdepth 1 -type d -mtime +7 -print -exec rm -rf {} \; || true
-  fi
+prune_backups_local() {
+  echo "[prune][local ] ${BACKUP_ROOT_LOCAL} : 7日より前のファイルを削除"
+  # ファイル削除
+  find "${BACKUP_ROOT_LOCAL}" -type f -mtime +7 -print -exec rm -f {} \; 2>/dev/null || true
+  # 空ディレクトリ削除
+  find "${BACKUP_ROOT_LOCAL}" -type d -empty -mindepth 1 -print -exec rmdir {} \; 2>/dev/null || true
 }
 
 # --------------------------------------------------
-# EPUB 一方向アップロード（変数が空なら何もしない）
+# EPUB/ZIP 一方向アップロード（設定が空ならスキップ）
 # --------------------------------------------------
 epub_upload() {
-  if [ -z "${EPUB_LOCAL}" ] || [ -z "${EPUB_REMOTE}" ]; then
-    return
+  [ -n "${EPUB_LOCAL}" ] && [ -n "${EPUB_REMOTE}" ] || return 0
+  if [ -d "${EPUB_LOCAL}" ]; then
+    echo "[epub] Uploading ${EPUB_LOCAL} → ${EPUB_REMOTE}"
+    rclone copy "${EPUB_LOCAL}" "${EPUB_REMOTE}" \
+      --config /config/rclone.conf --progress --update \
+      --exclude ".ready" --exclude ".bisync_initialized" \
+      ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV}
   fi
-  echo "[epub] Uploading ${EPUB_LOCAL} → ${EPUB_REMOTE}"
-  rclone copy "${EPUB_LOCAL}" "${EPUB_REMOTE}" \
-    --config /config/rclone.conf --progress --update ${RC_ENC}
 }
 
-# --------------------------------------------------
-# ZIP 一方向アップロード（変数が空なら何もしない）
-# --------------------------------------------------
 zip_upload() {
-  if [ -z "${ZIP_LOCAL}" ] || [ -z "${ZIP_REMOTE}" ]; then
-    return
+  [ -n "${ZIP_LOCAL}" ] && [ -n "${ZIP_REMOTE}" ] || return 0
+  if [ -d "${ZIP_LOCAL}" ]; then
+    echo "[zip ] Uploading ${ZIP_LOCAL} → ${ZIP_REMOTE}"
+    rclone copy "${ZIP_LOCAL}" "${ZIP_REMOTE}" \
+      --config /config/rclone.conf --progress --update \
+      --exclude ".ready" --exclude ".bisync_initialized" \
+      ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV}
   fi
-  echo "[zip] Uploading ${ZIP_LOCAL} → ${ZIP_REMOTE}"
-  rclone copy "${ZIP_LOCAL}" "${ZIP_REMOTE}" \
-    --config /config/rclone.conf --progress --update ${RC_ENC}
 }
 
 # --------------------------------------------------
 # 定期 bisync
+#   BusyBox でも安全なオプション選定：
+#   - 比較基準は size のみ（--checksum は併用しない）
+#   - 初回/復旧は --resync
 # --------------------------------------------------
 periodic_sync() {
-  today=$(date +%F)
+  today="$(date +%F)"
   echo "[rclone] bisync start (backup ${today})"
 
   mkdir -p "${BISYNC_WORKDIR}"
-  BISYNC_OPTS="--workdir ${BISYNC_WORKDIR} --size-only --compare size"
+  # --compare size と --size-only は趣旨が重複するため --size-only に統一
+  BISYNC_OPTS="--workdir ${BISYNC_WORKDIR} --size-only"
 
+  BISYNC_OPT=""
   if [ ! -f "${BISYNC_FLAG_FILE}" ]; then
     BISYNC_OPT="--resync"
     echo "  --resync (初回 or 復旧)"
-  else
-    BISYNC_OPT=""
   fi
 
-  if ! rclone bisync "${LOCAL}" "${REMOTE}" \
-      --config /config/rclone.conf ${BISYNC_OPTS} \
-      --backup-dir1 "${BACKUP_ROOT_LOCAL}/${today}" \
-      --backup-dir2 "${BACKUP_ROOT_REMOTE}/${today}" \
-      --checksum ${BISYNC_OPT} --verbose \
-      --exclude ".ready" --exclude ".bisync_initialized" ${RC_ENC}; then
+  if rclone bisync "${LOCAL}" "${REMOTE}" \
+        --config /config/rclone.conf ${BISYNC_OPTS} ${BISYNC_OPT} --verbose \
+        --backup-dir1 "${BACKUP_ROOT_LOCAL}/${today}" \
+        --backup-dir2 "${BACKUP_ROOT_REMOTE}/${today}" \
+        --exclude ".ready" --exclude ".bisync_initialized" \
+        ${RC_ENC_LOCAL} ${RC_ENC_WEBDAV}
+  then
+    : > "${BISYNC_FLAG_FILE}"
+  else
     echo "[rclone] bisync に失敗、フラグをリセット"
     rm -f "${BISYNC_FLAG_FILE}"
-  else
-    touch "${BISYNC_FLAG_FILE}"
   fi
 
-  prune_backups "${BACKUP_ROOT_REMOTE}" "remote"
-  prune_backups "${BACKUP_ROOT_LOCAL}"  "local"
+  prune_backups_remote
+  prune_backups_local
+}
+
+# --------------------------------------------------
+# 改行コード変換（dos2unix が入っていれば）
+#   BusyBox には通常入っていないので存在チェックしてから実行
+#   NUL 区切りで安全に処理
+# --------------------------------------------------
+normalize_line_endings() {
+  if command -v dos2unix >/dev/null 2>&1; then
+    echo "[cleanup] dos2unix で改行コードを変換中..."
+    find "${LOCAL}" -type f -print0 2>/dev/null \
+    | while IFS= read -r -d '' f; do
+        dos2unix "$f" >/dev/null 2>&1 || true
+      done
+  fi
 }
 
 # --------------------------------------------------
@@ -192,48 +264,23 @@ periodic_sync() {
 # --------------------------------------------------
 main() {
   setup_rclone_conf
-  prepare_initial
-  # 必要なディレクトリをまとめて作成
   mkdir -p "${LOCAL}" "${BACKUP_ROOT_LOCAL}" "${BISYNC_WORKDIR}"
+  prepare_initial
   initial_sync
-
-  # CRLF→LF 化（改行コードを Unix 形式に統一）
-  if command -v dos2unix >/dev/null 2>&1; then
-    echo "[cleanup] dos2unix で改行コードを変換中..."
-    find /share/data -type f -exec bash -c '
-      for f; do
-        if grep -Iq "" "$f"; then
-          echo "[cleanup] dos2unix $f"
-          dos2unix "$f"
-        else
-          echo "[skip] binary $f"
-        fi
-      done
-    ' _ {} +
-  fi
+  normalize_line_endings
 
   while :; do
-    # ループ開始時にステールロックを確実に削除
+    # bisync のステールロック掃除
     rm -f "${BISYNC_WORKDIR}"/*.lck 2>/dev/null || true
 
     periodic_sync
     epub_upload
     zip_upload
-    echo "[cleanup] dos2unix で改行コードを変換中..."
-    find /share/data -type f -exec bash -c '
-      for f; do
-        if grep -Iq "" "$f"; then
-          echo "[cleanup] dos2unix $f"
-          dos2unix "$f"
-        else
-          echo "[skip] binary $f"
-        fi
-      done
-    ' _ {} +
+    normalize_line_endings
+
     echo "[rclone] 60 分スリープ"
     sleep 3600
   done
 }
 
-# スクリプト実行
 main "$@"
