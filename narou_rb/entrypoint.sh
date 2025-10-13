@@ -35,16 +35,6 @@ curl -L "$u" -o "$DIR/$(basename "$u")"
 unzip -q -o -d "$DIR" "$DIR/$(basename "$u")" || unzip -O cp932 -q -o -d "$DIR" "$DIR/$(basename "$u")"
 rm "$DIR/$(basename "$u")"
 
-# 画像回転防止iniの生成（必ずRotateImage=0にする）
-if [ ! -f "$DIR/AozoraEpub3.ini" ]; then
-  echo "RotateImage=0" > "$DIR/AozoraEpub3.ini"
-elif grep -q '^RotateImage=' "$DIR/AozoraEpub3.ini"; then
-  # 既存のRotateImage行を必ず0に書き換える（全ての一致を置換）
-  sed -i 's/^RotateImage=.*/RotateImage=0/g' "$DIR/AozoraEpub3.ini"
-else
-  echo "RotateImage=0" >> "$DIR/AozoraEpub3.ini"
-fi
-
 # 作業ディレクトリを /share/data に移動
 cd /share/data
 
@@ -87,6 +77,16 @@ narou setting update.auto-schedule=${AUTO_UPDATE_TIME:-0300,1500}
 narou setting user-agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
 
 narou setting download.choices-of-digest-options=${AUTO_DIGEST_OPTIONS:-8,4,1}
+
+# AozoraEpub3の画像回転防止iniの生成（必ずRotateImage=0にする）
+if [ ! -f "$DIR/AozoraEpub3.ini" ]; then
+  echo "RotateImage=0" > "$DIR/AozoraEpub3.ini"
+elif grep -q '^RotateImage=' "$DIR/AozoraEpub3.ini"; then
+  # 既存のRotateImage行を必ず0に書き換える（全ての一致を置換）
+  sed -i 's/^RotateImage=.*/RotateImage=0/g' "$DIR/AozoraEpub3.ini"
+else
+  echo "RotateImage=0" >> "$DIR/AozoraEpub3.ini"
+fi
 
 # NAROU_DEBUG=1 narou web -p 3641 --no-browser
 RUBYOPT='-EUTF-8:UTF-8' narou web -p 3641 --no-browser
