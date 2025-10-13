@@ -36,8 +36,10 @@ unzip -q -o -d "$DIR" "$DIR/$(basename "$u")" || unzip -O cp932 -q -o -d "$DIR" 
 rm "$DIR/$(basename "$u")"
 
 # 画像回転防止iniの生成
-if [ ! -f $DIR/AozoraEpub3.ini ]; then
-  echo "RotateImage=0" > $DIR/AozoraEpub3.ini
+if grep -q '^RotateImage=' $DIR/AozoraEpub3.ini; then
+  sed -i 's/^RotateImage=.*/RotateImage=0/' $DIR/AozoraEpub3.ini
+else
+  echo "RotateImage=0" >> $DIR/AozoraEpub3.ini
 fi
 
 # 作業ディレクトリを /share/data に移動
