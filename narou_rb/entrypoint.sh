@@ -35,11 +35,14 @@ curl -L "$u" -o "$DIR/$(basename "$u")"
 unzip -q -o -d "$DIR" "$DIR/$(basename "$u")" || unzip -O cp932 -q -o -d "$DIR" "$DIR/$(basename "$u")"
 rm "$DIR/$(basename "$u")"
 
-# 画像回転防止iniの生成
-if grep -q '^RotateImage=' $DIR/AozoraEpub3.ini; then
-  sed -i 's/^RotateImage=.*/RotateImage=0/' $DIR/AozoraEpub3.ini
+# 画像回転防止iniの生成（必ずRotateImage=0にする）
+if [ ! -f "$DIR/AozoraEpub3.ini" ]; then
+  echo "RotateImage=0" > "$DIR/AozoraEpub3.ini"
+elif grep -q '^RotateImage=' "$DIR/AozoraEpub3.ini"; then
+  # 既存のRotateImage行を必ず0に書き換える（全ての一致を置換）
+  sed -i 's/^RotateImage=.*/RotateImage=0/g' "$DIR/AozoraEpub3.ini"
 else
-  echo "RotateImage=0" >> $DIR/AozoraEpub3.ini
+  echo "RotateImage=0" >> "$DIR/AozoraEpub3.ini"
 fi
 
 # 作業ディレクトリを /share/data に移動
