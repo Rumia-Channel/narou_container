@@ -45,6 +45,7 @@ services:
       AUTO_UPDATE_TIME: ${AUTO_UPDATE_TIME}
       AUTO_DIGEST_OPTIONS: ${AUTO_DIGEST_OPTIONS}
       MAKE_ZIP: ${MAKE_ZIP}
+      DL_COVER_SITE: ${DL_COVER_SITE}
     volumes:
       - webnovel:/share/data
       - epub:/share/epub

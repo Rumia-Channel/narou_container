@@ -88,5 +88,11 @@ else
   echo "RotateImage=0" >> "$DIR/AozoraEpub3.ini"
 fi
 
+export DL_COVER_SITE="${DL_COVER_SITE:-Pixiv}"
+if [ -n "$DL_COVER_SITE" ]; then
+  nohup /dl_cover.sh >/dev/null 2>&1 &
+fi
+
+
 # NAROU_DEBUG=1 narou web -p 3641 --no-browser
 RUBYOPT='-EUTF-8:UTF-8' narou web -p 3641 --no-browser
